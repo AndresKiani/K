@@ -1,0 +1,114 @@
+% Global coupling
+C = 74;
+
+% Mean output firing rate
+e0 = 4.5; 
+
+% Structure of parameters and initial conditions
+Spar = struct('A',3.25,'a',100,'B',22,'b',50,'c1',C,'c2',...
+               0.8*C,'c3',0.25*C,'c4',0.25*C,'pIN',15);
+
+Sini = struct('t0',0,'yP0',0.1,'yE0',22,'yI0',14,'zP0',1,'zE0',1,'zI0',1);
+
+% Step size
+h = 0.001;
+
+% Time course in seconds
+n = 1; 
+
+% JR solution approximation with RK4
+[P,dP,E,dE,I,dI] = RK4JRe0(Spar,Sini,n,h,e0);
+
+% Definition of LFP based on papers
+LFP = E - I;
+
+%%
+function [P,dP,E,dE,I,dI] = RK4JRe0(Spar,Sini,n,h,e0)
+
+Sigmoid = @(X) (2*e0)/(1 + exp(0.56*(6 - X))); %Sigmoid Function, make sure to change this if you change it anywhere else!
+
+%Second derivatives
+
+ddP = @(M,yP,zP,yE,yI) M.A*M.a*Sigmoid(yE - yI)... 
+      - 2*M.a*zP - (M.a)^2*yP;
+ 
+ddE = @(M,yP,yE,zE) M.A*M.a*(M.c2*Sigmoid(M.c1*yP) + M.pIN)...
+      - 2*M.a*zE - (M.a)^2*yE;
+ 
+ddI = @(M,yP,yI,zI) M.B*M.b*(M.c4*Sigmoid(M.c3*yP))...
+      - 2*M.b*zI - (M.b)^2*yI;
+
+%Allocating vectors, and setting initial conditions
+  
+P = zeros(1,ceil(n/h));
+P(1) = Sini.yP0;
+
+dP = zeros(1,ceil(n/h));
+dP(1) = Sini.zP0;
+
+E = zeros(1,ceil(n/h));
+E(1) = Sini.yE0;
+
+dE = zeros(1,ceil(n/h));
+dE(1) = Sini.zE0;
+
+I = zeros(1,ceil(n/h));
+I(1) = Sini.yI0;
+
+dI = zeros(1,ceil(n/h));
+dI(1) = Sini.zI0;
+
+stepdiv = 1/6;
+
+%Runge Kutta solution
+
+for i = 1:(ceil(n/h))
+   
+    eK1 = h*dE(i);
+    eL1 = h*ddE(Spar,P(i),E(i),dE(i));
+    pK1 = h*dP(i);
+    pL1 = h*ddP(Spar,P(i),dP(i),E(i),I(i));
+    iK1 = h*dI(i);
+    iL1 = h*ddI(Spar,P(i),I(i),dI(i));
+   
+    eK2 = h*(dE(i) + eL1/2);
+    eL2 = h*ddE(Spar,P(i) + pK1/2,E(i) + eK1/2,dE(i) + eL1/2);
+    pK2 = h*(dP(i) + pL1/2);
+    pL2 = h*ddP(Spar,P(i) + pK1/2,dP(i) + pL1/2,E(i) + eK1/2,I(i) + iK1/2);
+    iK2 = h*(dI(i) + iL1/2);
+    iL2 = h*ddI(Spar,P(i) + pK1/2,I(i) + iK1/2,dI(i) + iL1/2);
+   
+    eK3 = h*(dE(i) + eL2/2);
+    eL3 = h*ddE(Spar,P(i) + pK2/2,E(i) + eK2/2,dE(i) + eL2/2);
+    pK3 = h*(dP(i) + pL2/2);
+    pL3 = h*ddP(Spar,P(i) + pK2/2,dP(i) + pL2/2,E(i) + eK2/2,I(i) + iK2/2);
+    iK3 = h*(dI(i) + iL2/2);
+    iL3 = h*ddI(Spar,P(i) + pK2/2,I(i) + iK2/2,dI(i) + iL2/2);
+
+    eK4 = h*(dE(i) + eL3);
+    eL4 = h*ddE(Spar,P(i) + pK3,E(i) + eK3,dE(i) + eL3);
+    pK4 = h*(dP(i) + pL3);
+    pL4 = h*ddP(Spar,P(i) + pK3,dP(i) + pL3,E(i) + eK3,I(i) + iK3);
+    iK4 = h*(dI(i) + iL3);
+    iL4 = h*ddI(Spar,P(i) + pK3,I(i) + iK3,dI(i) + iL3);
+   
+   
+    P(i+1) = P(i) + stepdiv*(pK1 + 2*pK2 + 2*pK3 + pK4);
+    dP(i+1) = dP(i) + stepdiv*(pL1 + 2*pL2 + 2*pL3 + pL4);
+   
+    E(i+1) = E(i) + stepdiv*(eK1 + 2*eK2 + 2*eK3 + eK4);
+    dE(i+1) = dE(i) + stepdiv*(eL1 + 2*eL2 + 2*eL3 + eL4);
+   
+    I(i+1) = I(i) + stepdiv*(iK1 + 2*iK2 + 2*iK3 + iK4);
+    dI(i+1) = dI(i) + stepdiv*(iL1 + 2*iL2 + 2*iL3 + iL4);
+   
+end
+
+P = transpose(P);
+dP = transpose(dP);
+E = transpose(E);
+dE = transpose(dE);
+I = transpose(I);
+dI = transpose(dI);
+
+end
